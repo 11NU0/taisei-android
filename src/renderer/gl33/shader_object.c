@@ -51,7 +51,7 @@ static void print_info_log(GLuint shader) {
 	glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &len);
 
 	if(len > 1) {
-		char log[len] = {};
+		char log[len];
 		glGetShaderInfoLog(shader, len, &alen, log);
 
 		log_warn(

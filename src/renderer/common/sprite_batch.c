@@ -9,6 +9,7 @@
 #include "sprite_batch_internal.h"
 
 #include "../api.h"
+#include "log.h"
 #include "util.h"
 #include "util/glm.h"
 #include "resource/sprite.h"
@@ -153,6 +154,17 @@ void r_flush_sprites(void) {
 
 	r_state_push();
 	r_mat_proj_push_premade(_r_sprite_batch.projection);
+
+	// Defensive: never try to draw a batch without a shader program.
+	// This can happen on the very first frame after startup, before
+	// res_post_init() has assigned the default text shader.
+	if(_r_sprite_batch.shader == NULL) {
+		log_warn("r_flush_sprites: dropping %u sprites (NULL shader)", pending);
+		r_vertex_buffer_invalidate(_r_sprite_batch.vbuf);
+		r_mat_proj_pop();
+		r_state_pop();
+		return;
+	}
 
 	r_shader_ptr(NOT_NULL(_r_sprite_batch.shader));
 	r_uniform_sampler("tex", _r_sprite_batch.primary_texture);

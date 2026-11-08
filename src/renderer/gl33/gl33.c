@@ -569,7 +569,8 @@ static void gl33_sync_magic_uniforms(void) {
 
 		if(num_color_out > 0) {
 			IntExtent fb_size = gl33_get_default_framebuffer_size();
-			vec2 out[num_color_out] = {};
+			vec2 out[num_color_out];
+			memset(out, 0, sizeof(out));
 			glm_vec2_copy((vec2) { fb_size.w, fb_size.h }, out[0]);
 			r_uniform_vec2_array(u[UMAGIC_COLOR_OUT_SIZES], 0, num_color_out, out);
 		}
