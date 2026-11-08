@@ -282,6 +282,10 @@ static bool events_handler_hotkeys(SDL_Event *event, void *arg);
 static bool events_handler_key_down(SDL_Event *event, void *arg);
 static bool events_handler_key_up(SDL_Event *event, void *arg);
 
+#ifdef __ANDROID__
+static bool events_handler_app_background(SDL_Event *event, void *arg);
+#endif
+
 attr_unused
 static bool events_handler_debug_winevt(SDL_Event *event, void *arg) {
 	// copied from SDL wiki almost verbatim
@@ -348,9 +352,19 @@ static EventHandler default_handlers[] = {
 	{ .proc = events_handler_hotkeys,               .priority = EPRIO_HOTKEYS,      .event_type = SDL_EVENT_KEY_DOWN },
 	{ .proc = events_handler_key_down,              .priority = EPRIO_TRANSLATION,  .event_type = SDL_EVENT_KEY_DOWN },
 	{ .proc = events_handler_key_up,                .priority = EPRIO_TRANSLATION,  .event_type = SDL_EVENT_KEY_UP },
+#ifdef __ANDROID__
+	{ .proc = events_handler_app_background,        .priority = EPRIO_SYSTEM,       .event_type = SDL_EVENT_DID_ENTER_BACKGROUND },
+#endif
 
 	{}
 };
+
+#ifdef __ANDROID__
+static bool events_handler_app_background(SDL_Event *event, void *arg) {
+	events_emit(TE_GAME_PAUSE, 0, NULL, NULL);
+	return false;
+}
+#endif
 
 static void events_register_default_handlers(void) {
 	for(EventHandler *h = default_handlers; h->proc; ++h) {
@@ -413,6 +427,12 @@ static bool events_handler_clipboard(SDL_Event *event, void *arg) {
 static bool events_handler_key_down(SDL_Event *event, void *arg) {
 	SDL_Scancode scan = event->key.scancode;
 	bool repeat = event->key.repeat;
+
+#ifdef __ANDROID__
+	if(scan == SDL_SCANCODE_AC_BACK) {
+		scan = SDL_SCANCODE_ESCAPE;
+	}
+#endif
 
 	if(video_get_backend() == VIDEO_BACKEND_EMSCRIPTEN && scan == SDL_SCANCODE_TAB) {
 		scan = SDL_SCANCODE_ESCAPE;

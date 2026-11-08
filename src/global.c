@@ -11,6 +11,7 @@
 #include "taskmanager.h"
 #include "util/env.h"
 #include "gamepad.h"
+#include "touch_controls.h"
 
 Global global;
 
@@ -46,7 +47,17 @@ void init_global(CLIAction *cli) {
 // ALWAYS use this instead of SDL_GetKeyState if you need it.
 // XXX: Move this somewhere?
 bool gamekeypressed(KeyIndex key) {
-	return SDL_GetKeyboardState(NULL)[config_get_int(KEYIDX_TO_CFGIDX(key))] || gamepad_game_key_pressed(key);
+	int scancode = config_get_int(KEYIDX_TO_CFGIDX(key));
+
+#ifdef __ANDROID__
+	// Touch controls synthesize key presses that never reach SDL's physical
+	// keyboard state; merge them so player_fix_input() sees them as held.
+	return touch_controls_key_pressed(scancode)
+		|| SDL_GetKeyboardState(NULL)[scancode]
+		|| gamepad_game_key_pressed(key);
+#else
+	return SDL_GetKeyboardState(NULL)[scancode] || gamepad_game_key_pressed(key);
+#endif
 }
 
 static SDL_AtomicInt quitting;

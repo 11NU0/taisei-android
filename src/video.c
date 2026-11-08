@@ -18,6 +18,7 @@
 #include "stagedraw.h"
 #include "stageinfo.h"
 #include "taskmanager.h"
+#include "touch_controls.h"
 #include "util/env.h"
 #include "util/fbmgr.h"
 #include "util/graphics.h"
@@ -434,7 +435,7 @@ static void video_update_mode_lists(void) {
 }
 
 static void video_set_minimum_size(uint w, uint h) {
-#ifndef __EMSCRIPTEN__	/* broken */
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)	/* broken */
 	log_debug("Set minimum size: %dx%d", w, h);
 	SDL_SetWindowMinimumSize(video.window, w, h);
 #endif
@@ -960,6 +961,11 @@ void video_init(const VideoInitParams *params) {
 	} else if(!strcmp(driver, "Switch")) {
 		video.backend = VIDEO_BACKEND_SWITCH;
 		video_query_capability = video_query_capability_switch;
+	} else if(!strcmp(driver, "Android")) {
+		video.backend = VIDEO_BACKEND_OTHER;
+		video_query_capability = video_query_capability_alwaysfullscreen;
+		config_set_int(CONFIG_FULLSCREEN, true);
+		config_set_int(CONFIG_VID_RESIZABLE, false);
 	} else {
 		video.backend = VIDEO_BACKEND_OTHER;
 	}
@@ -1053,9 +1059,17 @@ void video_swap_buffers(void) {
 		r_mat_proj_pop();
 		r_state_pop();
 
+#ifdef __ANDROID__
+		touch_controls_draw();
+#endif
+
 		r_swap(video.window);
 		r_framebuffer(prev_fb);
 	} else {
+#ifdef __ANDROID__
+		touch_controls_draw();
+#endif
+
 		r_swap(video.window);
 	}
 
