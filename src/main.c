@@ -18,6 +18,7 @@
 #include "global.h"
 #include "i18n/i18n.h"
 #include "log.h"
+#include "log_android.h"
 #include "log_sdl.h"
 #include "memory/scratch.h"
 #include "menu/mainmenu.h"
@@ -32,6 +33,7 @@
 #include "stage.h"
 #include "stageobjects.h"
 #include "taskmanager.h"
+#include "touch_controls.h"
 #include "util/env.h"
 #include "util/gamemode.h"
 #include "util/io.h"
@@ -89,6 +91,11 @@ static void taisei_shutdown(void) {
 	audio_shutdown();
 	r_models_shutdown();
 	r_sprite_batch_shutdown();
+
+#ifdef __ANDROID__
+	touch_controls_shutdown();
+#endif
+
 	video_shutdown();
 	gamepad_shutdown();
 	stageinfo_shutdown();
@@ -113,6 +120,10 @@ static void init_log(void) {
 	log_init(LOG_DEFAULT_LEVELS);
 	log_add_output(lvls_stdout, SDL_RWFromFP(stdout, false), log_formatter_console);
 	log_add_output(lvls_stderr, SDL_RWFromFP(stderr, false), log_formatter_console);
+
+#ifdef __ANDROID__
+	log_android_init();
+#endif
 }
 
 static void init_log_file(void) {
@@ -423,6 +434,11 @@ static void main_post_vfsinit(CallChainResult ccr) {
 		.width = ctx->cli.width,
 		.height = ctx->cli.height,
 	});
+
+#ifdef __ANDROID__
+	touch_controls_init();
+#endif
+
 	filewatch_init();
 	res_init();
 	r_models_init();
