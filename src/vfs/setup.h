@@ -21,6 +21,7 @@ typedef struct VfsSetupFixedPaths {
 } VfsSetupFixedPaths;
 
 void vfs_setup(CallChain onready);
+void vfs_setup_generic(CallChain onready);
 
 static inline void vfs_setup_onsync_done(CallChainResult ccr) {
 	CallChain *next = ccr.ctx;

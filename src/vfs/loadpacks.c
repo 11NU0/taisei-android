@@ -41,7 +41,8 @@ static struct pkg_loader_t {
 };
 
 static struct pkg_loader_t* find_loader(const char *str) {
-	char buf[strlen(str) + 1] = {};
+	char buf[strlen(str) + 1];
+	memset(buf, 0, sizeof(buf));
 
 	for(char *p = buf; *str; ++p, ++str) {
 		*p = tolower(*str);

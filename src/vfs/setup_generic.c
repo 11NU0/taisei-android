@@ -15,7 +15,7 @@
 
 // NOTE: For simplicity, we will assume that vfs_sync is not needed in this backend.
 
-void vfs_setup(CallChain next) {
+void vfs_setup_generic(CallChain next) {
 	const char *res_path = env_get_string_nonempty("TAISEI_RES_PATH", vfs_platformpath_resroot());
 	const char *storage_path = env_get_string_nonempty("TAISEI_STORAGE_PATH", vfs_platformpath_storage());
 	const char *cache_path = env_get_string_nonempty("TAISEI_CACHE_PATH", vfs_platformpath_cache());
@@ -135,3 +135,9 @@ void vfs_setup(CallChain next) {
 
 	run_call_chain(&next, NULL);
 }
+
+#ifndef __ANDROID__
+void vfs_setup(CallChain next) {
+	vfs_setup_generic(next);
+}
+#endif
