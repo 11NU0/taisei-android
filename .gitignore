@@ -1,4 +1,5 @@
 build/
+build-android/
 build-release/
 winbuild/
 osxbuild/

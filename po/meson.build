@@ -1,7 +1,12 @@
 
 # i18n module doesn't check for these properly
-find_program('msgfmt', required: true)
-find_program('xgettext', required: true)
+msgfmt_prog = find_program('msgfmt', required: false)
+xgettext_prog = find_program('xgettext', required: false)
+have_gettext = msgfmt_prog.found() and xgettext_prog.found()
+
+if not have_gettext
+    warning('msgfmt/xgettext not found; building without translations')
+endif
 
 i18n = import('i18n')
 
@@ -34,10 +39,14 @@ l10n_pkg_name = '10-l10n'
 l10n_subdir_name = 'locale'
 l10n_build_dir = meson.current_build_dir()
 
-l10n_mo_targets = i18n.gettext(meson.project_name(),
-    install : install_l10n,
-    install_dir : data_path / '@0@.pkgdir'.format(l10n_pkg_name) / l10n_subdir_name,
-    args : xgettext_args,
-)[0]
+if have_gettext
+    l10n_mo_targets = i18n.gettext(meson.project_name(),
+        install : install_l10n,
+        install_dir : data_path / '@0@.pkgdir'.format(l10n_pkg_name) / l10n_subdir_name,
+        args : xgettext_args,
+    )[0]
+else
+    l10n_mo_targets = []
+endif
 
 # NOTE: packaging and installation handled in resources/meson.build

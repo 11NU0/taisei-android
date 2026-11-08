@@ -210,7 +210,11 @@ opt_gamemode = get_option('gamemode').require(host_machine.system() == 'linux',
 
 dep_freetype    = dependency('freetype2',                           required : true)
 dep_png         = dependency('libpng', 'libpng16', version : '>=1.5',   required : get_option('use_libpng'))
-dep_sdl3        = dependency('sdl3',           version : '>=3.2.0', fallback : ['sdl3-cmake-wrapper', 'sdl3_dep'])
+if host_machine.system() == 'android'
+    dep_sdl3        = dependency('SDL3', method : 'cmake', version : '>=3.2.0', required : true)
+else
+    dep_sdl3        = dependency('sdl3',           version : '>=3.2.0', fallback : ['sdl3-cmake-wrapper', 'sdl3_dep'])
+endif
 dep_webp        = dependency('libwebpdecoder', 'libwebp', version : '>=0.5',   required : true)
 dep_zlib        = dependency('zlib',                                required : true)
 dep_zstd        = dependency('libzstd',        version : '>=1.4.0', fallback : ['libzstd', 'libzstd_dep'])

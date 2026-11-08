@@ -77,6 +77,7 @@ taisei_src = files(
     'hirestime.c',
     'item.c',
     'list.c',
+    'log_android.c',
     'log_sdl.c',
     'log.c',
     'move.c',
@@ -97,6 +98,7 @@ taisei_src = files(
     'stats.c',
     'taskmanager.c',
     'thread.c',
+    'touch_controls.c',
     'transition.c',
     'version.c',
     'video.c',
@@ -418,6 +420,26 @@ if host_machine.system() == 'emscripten'
     )
 
     bindist_deps += taisei_js
+elif host_machine.system() == 'android'
+    add_languages('cpp', native : false, required : true)
+
+    android_deps = [
+        declare_dependency(link_args : ['-llog', '-landroid', '-lOpenSLES']),
+    ]
+
+    taisei = shared_library(taisei_basename, taisei_src, taisei_main_src, version_deps,
+        dependencies : taisei_deps_linkwhole + taisei_deps + android_deps,
+        c_args : taisei_c_args,
+        c_pch : 'pch/taisei_pch.h',
+        link_args : taisei_link_args,
+        link_language : 'cpp',
+        install : true,
+        install_dir : '.',
+        install_tag : 'runtime',
+    )
+
+    bindist_deps += taisei
+    have_libtaisei = true
 elif host_machine.system() == 'nx'
     taisei_elf_name = '@0@.elf'.format(taisei_basename)
     taisei_elf = executable(taisei_elf_name, taisei_src, taisei_main_src, version_deps,

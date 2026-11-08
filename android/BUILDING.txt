@@ -1,0 +1,75 @@
+Taisei on Android
+=================
+
+This directory contains an Android port of Taisei (SDL3 + OpenGL ES 3.0).
+
+Layout
+------
+  build_android.py       one-command build: meson cross build + APK packaging
+  fetch_subprojects.py   pre-fetch required meson wrap repositories (parallel)
+  options.ini            meson configuration used for Android
+  app/                   AndroidManifest.xml, resources, TaiseiActivity.java
+
+The SDL Java glue (org.libsdl.app.*) is copied from subprojects/sdl3 at build
+time; no Gradle/Android Studio installation is required. The APK is assembled
+directly with aapt2, javac, d8, zipalign and apksigner from the Android SDK.
+
+Requirements (host)
+-------------------
+  * Python 3.10+ with: meson >= 1.8, ninja, cmake, backports.zstd, ziglang
+    (pip install meson ninja cmake backports.zstd ziglang)
+    ziglang supplies the *build machine* C/C++ compiler used for native build
+    tools; it is required because some subprojects compile host utilities.
+  * Android SDK: platform android-34, build-tools 34.0.0, platform-tools
+  * Android NDK r26b (26.1.10909125); other recent NDKs should also work
+  * A JDK (javac, jar, keytool) on PATH or JAVA_HOME
+
+Build
+-----
+  python android/fetch_subprojects.py          # once, clones wrap repos
+  python android/build_android.py --abis arm64-v8a
+
+Options:
+  --abis arm64-v8a,armeabi-v7a,x86_64          # multi-ABI APK
+  --sdk /path/to/sdk --ndk /path/to/ndk        # otherwise auto-detected
+  --buildtype debug|release                    # default release
+  -j N                                         # parallel compile jobs
+  --configure-only                             # meson setup only
+  --skip-native                                # repackage existing build
+  --skip-apk                                   # native library only
+  --install                                    # adb install -r when done
+
+Output:
+  build-android/<abi>/src/libtaisei.so         native library
+  build-android/<abi>/install/taisei/data      installed game resources
+  build-android/taisei-android.apk             signed (debug key) APK
+
+Runtime behaviour
+-----------------
+  * On first launch the bundled resources (assets/data/*) are extracted to the
+    app's internal storage, and a content hash (assets/taisei/version.txt) is
+    used to re-extract only when the bundled data changes. TAISEI_RES_PATH is
+    pointed at that directory; saves/config live in SDL_GetPrefPath().
+  * Rendering uses the gles30 backend. Desktop GLSL shaders are translated at
+    runtime through glslang + SPIRV-Cross (shader_transpiler=enabled), so the
+    stock resource packages work unmodified.
+  * Touch controls (similar to browser-based Touhou ports such as
+    touhouonline.com): touch anywhere on the screen and drag -- the player
+    follows your finger trail (touch trail = player trail). Press a second
+    finger while dragging to move slowly (focus). Right side buttons: A
+    (shot / menu accept), B (bomb / menu abort), F (hold to focus), S (skip
+    dialogue), an auto-fire toggle, and a pause button. The Android back
+    button is mapped to Escape. All keys follow the in-game key bindings.
+  * Everything is logged to logcat under the "taisei" tag:
+        adb logcat -s taisei:* SDL:*
+
+Known gaps / TODO
+-----------------
+  * The touch overlay is a simple translucent widget layer; there is no
+    options-menu toggle or layout editor for it yet.
+  * No immersive-mode gesture handling beyond SDL defaults.
+  * GLES context loss on process suspension relies on SDL's own handling;
+    the engine does not yet rebuild GPU resources after a context loss.
+  * Offline ESSL shader generation (validate_glsl/transpile_glsl) is not
+    wired up for Android, so shader translation happens at runtime.
+  * Only arm64-v8a has been exercised by the build scripts so far.

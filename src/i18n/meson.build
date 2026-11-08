@@ -1,11 +1,15 @@
-format_strings = i18n.xgettext('format_strings', taisei_src, args : [ '-kF_', '--from-code=utf-8' ], install : false)
+if have_gettext
+    format_strings = i18n.xgettext('format_strings', taisei_src, args : [ '-kF_', '--from-code=utf-8' ], install : false)
 
-format_string_list = custom_target(
-    'format_string_list.c',
-    output : 'format_string_list.c',
-    input : format_strings,
-    command : [ extract_format_strings_script, '@INPUT@', '@OUTPUT@' ]
-)
+    format_string_list = custom_target(
+        'format_string_list.c',
+        output : 'format_string_list.c',
+        input : format_strings,
+        command : [ extract_format_strings_script, '@INPUT@', '@OUTPUT@' ]
+    )
+else
+    format_string_list = files('format_string_list_fallback.c')
+endif
 
 i18n_src = files(
     'i18n.c',

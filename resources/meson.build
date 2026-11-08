@@ -105,7 +105,9 @@ foreach pkg : packages
 endforeach
 
 # Package or install the special l10n pkgdir
-if package_data
+if not have_gettext
+    message('Skipping translation package (gettext tools unavailable)')
+elif package_data
     zips += {
         'zip' : '@0@.zip'.format(l10n_pkg_name),
         'source' : l10n_build_dir,
