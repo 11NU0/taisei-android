@@ -30,6 +30,20 @@ For gameplay instructions, read `this <doc/GAME.rst>`__.
 
 For the story, read `this <doc/STORY.txt>`__. (Spoiler warning!)
 
+Android port
+^^^^^^^^^^^^
+
+This fork adds an Android port of Taisei Project. It builds a native Android
+app using SDL3 and OpenGL ES 3.0, with virtual touch controls modeled after
+browser-based Touhou ports:
+
+* Move by dragging anywhere on the screen — the player follows your finger.
+* Press a second finger while dragging to move slowly (focus).
+* On-screen buttons for shot, bomb, focus, skip, auto-fire and pause.
+
+Prebuilt APKs are attached to the GitHub releases. For build instructions,
+see `android/BUILDING.txt <android/BUILDING.txt>`__.
+
 About Tōhō Project
 ^^^^^^^^^^^^^^^^^^
 

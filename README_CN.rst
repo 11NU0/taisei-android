@@ -26,6 +26,19 @@ Windows, GNU/Linux, macOS, 以及带有WebGL的浏览器（Firefox与基于Chrom
 
 想要了解剧情, 可以读一下 `这个 <doc/STORY_CN.txt>`__. (小心剧透！)
 
+Android 移植版
+^^^^^^^^^^^^^^
+
+这个分支为泰西Project增加了 Android 移植。它使用 SDL3 和 OpenGL ES 3.0 构建原生
+Android 应用，并提供参考了网页版东方移植的虚拟触控操作：
+
+* 在屏幕任意位置拖动即可移动 —— 玩家会跟随你的手指。
+* 拖动时再按一根手指可低速移动（聚焦）。
+* 屏幕上有射击、炸弹、聚焦、跳过、自动射击和暂停等虚拟按键。
+
+预编译的 APK 会附在 GitHub Release 中。构建方法请参阅
+`android/BUILDING.txt <android/BUILDING.txt>`__。
+
 关于东方Project
 ^^^^^^^^^^^^^^^^^^
 
