@@ -16,16 +16,18 @@
 
 /*
  * Touch controls modeled after browser-based Touhou ports
- * (e.g. touhouonline.com / Eagler Touhou):
+ * (touhouonline.com / Eagler Touhou), with both movement modes:
  *
- *   - Movement: "touch trail = player trail". Touch anywhere (outside of
- *     the buttons) and drag; the player follows your finger. Internally
- *     the finger delta is accumulated and consumed at the player's
- *     keyboard movement speed, so the player roughly tracks the finger
- *     trail without the finger having to cover the player sprite.
- *   - Focus (slow movement): press a second finger anywhere on the
- *     screen while dragging.
- *   - Buttons: shot, bomb, focus, skip, auto-fire toggle and pause.
+ *   - Direct touch ("touch trail = player trail"): touch anywhere and
+ *     drag; the player follows your finger. Finger delta is accumulated
+ *     and consumed at the keyboard movement speed.
+ *   - Virtual joystick: a fixed stick base on the left; drag its knob
+ *     to steer. The stick deflection is converted to direction keys.
+ *
+ * A mode button toggles between the two movement modes.
+ *
+ * Focus (slow movement): hold the focus button, or press a second
+ * finger while dragging (direct touch mode).
  */
 
 #define TC_MAX_FINGERS 16
@@ -37,6 +39,7 @@ typedef enum TCButton {
 	TC_BTN_SKIP,
 	TC_BTN_AUTO,
 	TC_BTN_PAUSE,
+	TC_BTN_MODE,
 	TC_NUM_BUTTONS,
 } TCButton;
 
@@ -54,17 +57,29 @@ static const TCButtonDef tc_buttons[TC_NUM_BUTTONS] = {
 	[TC_BTN_SKIP]  = { 566, 392, 32, "S" },
 	[TC_BTN_AUTO]  = { 688, 188, 30, "∞" },
 	[TC_BTN_PAUSE] = { 748,  52, 30, "II" },
+	[TC_BTN_MODE]  = { 748, 130, 26, "M" },
 };
 
-/* virtual stick visual geometry */
-#define TC_STICK_RADIUS      120.0f
-#define TC_STICK_KNOB_RADIUS  42.0f
+typedef enum TCMovementMode {
+	TC_MODE_DRAG,   // direct touch: drag anywhere to move
+	TC_MODE_STICK,  // virtual joystick on the left
+} TCMovementMode;
 
-/* virtual pixels consumed per frame while a direction key is held;
- * approximates the player's keyboard movement speed */
+/* virtual stick visual geometry (fixed base position) */
+#define TC_STICK_X          140.0f
+#define TC_STICK_Y          450.0f
+#define TC_STICK_RADIUS     120.0f
+#define TC_STICK_KNOB_RADIUS 42.0f
+/* deflection beyond this is a full-tilt direction */
+#define TC_STICK_MAX_TRAVEL (TC_STICK_RADIUS - TC_STICK_KNOB_RADIUS)
+/* below this, no direction is held (deadzone) */
+#define TC_STICK_DEADZONE   12.0f
+/* direction-key engage angle threshold (cos of 8-way sector half-angle) */
+#define TC_STICK_DIR_COS    0.3826834f
+
+/* direct-touch: virtual pixels consumed per frame while a direction is held */
 #define TC_MOVE_PER_FRAME 7.0f
-/* hysteresis: direction key turns on above this, and stays on until the
- * accumulated credit drops below the release threshold */
+/* hysteresis thresholds for the direct-touch direction keys */
 #define TC_MOVE_ON_THRESHOLD  2.0f
 #define TC_MOVE_OFF_THRESHOLD 0.4f
 
@@ -82,6 +97,7 @@ static struct {
 	bool button_state[TC_NUM_BUTTONS];
 	bool dir_state[4];
 	bool auto_fire;
+	TCMovementMode move_mode;
 
 	struct {
 		bool active;
@@ -95,6 +111,13 @@ static struct {
 		float cur_x;
 		float cur_y;
 	} drag;
+
+	struct {
+		bool active;
+		SDL_FingerID id;
+		float cur_x;
+		float cur_y;
+	} stick;
 
 	SDL_FingerID focus_id;
 } tc;
@@ -178,23 +201,27 @@ static void tc_set_auto_fire(bool on) {
 	}
 }
 
+static void tc_clear_dirs(void) {
+	for(int i = 0; i < 4; ++i) {
+		tc_set_dir(i, false);
+	}
+}
+
 static void tc_release_all(void) {
 	for(int i = 0; i < TC_NUM_BUTTONS; ++i) {
 		tc_set_button(i, false);
 	}
 
-	for(int i = 0; i < 4; ++i) {
-		tc_set_dir(i, false);
-	}
-
+	tc_clear_dirs();
 	tc_set_auto_fire(false);
-
 	SDL_zero(tc_scancodes_down);
 
 	tc.drag.active = false;
 	tc.drag.id = 0;
 	tc.drag.acc_x = 0;
 	tc.drag.acc_y = 0;
+	tc.stick.active = false;
+	tc.stick.id = 0;
 	tc.focus_id = 0;
 
 	for(int i = 0; i < TC_MAX_FINGERS; ++i) {
@@ -256,6 +283,28 @@ static int tc_hit_button(float x, float y) {
 	return -1;
 }
 
+static bool tc_hit_stick_base(float x, float y) {
+	float dx = x - TC_STICK_X;
+	float dy = y - TC_STICK_Y;
+	return dx * dx + dy * dy <= TC_STICK_RADIUS * TC_STICK_RADIUS;
+}
+
+static void tc_toggle_mode(void) {
+	tc.move_mode = tc.move_mode == TC_MODE_DRAG ? TC_MODE_STICK : TC_MODE_DRAG;
+
+	// reset movement state on mode switch
+	tc.drag.active = false;
+	tc.drag.id = 0;
+	tc.drag.acc_x = 0;
+	tc.drag.acc_y = 0;
+	tc.stick.active = false;
+	tc.stick.id = 0;
+	tc_clear_dirs();
+
+	log_info("Touch movement mode: %s",
+		tc.move_mode == TC_MODE_DRAG ? "direct touch" : "virtual joystick");
+}
+
 static bool tc_handle_finger_down(SDL_TouchFingerEvent *event) {
 	float x, y;
 	tc_finger_to_virtual(event, &x, &y);
@@ -273,9 +322,11 @@ static bool tc_handle_finger_down(SDL_TouchFingerEvent *event) {
 		f->button = button;
 
 		if(button == TC_BTN_AUTO) {
-			// toggle auto-fire
 			f->button = -1; // not a hold button
 			tc_set_auto_fire(!tc.auto_fire);
+		} else if(button == TC_BTN_MODE) {
+			f->button = -1; // not a hold button
+			tc_toggle_mode();
 		} else {
 			tc_set_button(button, true);
 		}
@@ -283,8 +334,19 @@ static bool tc_handle_finger_down(SDL_TouchFingerEvent *event) {
 		return false;
 	}
 
+	if(tc.move_mode == TC_MODE_STICK) {
+		// joystick mode: grab the stick when touching its base
+		if(!tc.stick.active && tc_hit_stick_base(x, y)) {
+			tc.stick.active = true;
+			tc.stick.id = event->fingerID;
+			tc.stick.cur_x = x;
+			tc.stick.cur_y = y;
+		}
+		return false;
+	}
+
+	// direct touch mode
 	if(!tc.drag.active) {
-		// begin a drag: touch trail = player trail
 		tc.drag.active = true;
 		tc.drag.id = event->fingerID;
 		tc.drag.acc_x = 0;
@@ -316,13 +378,15 @@ static bool tc_handle_finger_motion(SDL_TouchFingerEvent *event) {
 	tc_finger_to_virtual(event, &x, &y);
 
 	if(tc.drag.active && tc.drag.id == event->fingerID) {
-		// accumulate the finger trail into movement "credit"
 		tc.drag.acc_x += x - tc.drag.last_x;
 		tc.drag.acc_y += y - tc.drag.last_y;
 		tc.drag.last_x = x;
 		tc.drag.last_y = y;
 		tc.drag.cur_x = x;
 		tc.drag.cur_y = y;
+	} else if(tc.stick.active && tc.stick.id == event->fingerID) {
+		tc.stick.cur_x = x;
+		tc.stick.cur_y = y;
 	} else if(f->is_button && f->button >= 0) {
 		int hit = tc_hit_button(x, y);
 		tc_set_button(f->button, hit == f->button);
@@ -343,10 +407,11 @@ static bool tc_handle_finger_up(SDL_TouchFingerEvent *event) {
 		tc.drag.id = 0;
 		tc.drag.acc_x = 0;
 		tc.drag.acc_y = 0;
-
-		for(int i = 0; i < 4; ++i) {
-			tc_set_dir(i, false);
-		}
+		tc_clear_dirs();
+	} else if(tc.stick.active && tc.stick.id == event->fingerID) {
+		tc.stick.active = false;
+		tc.stick.id = 0;
+		tc_clear_dirs();
 	} else if(f->is_focus) {
 		tc.focus_id = 0;
 		tc_set_button(TC_BTN_FOCUS, false);
@@ -358,15 +423,13 @@ static bool tc_handle_finger_up(SDL_TouchFingerEvent *event) {
 	return false;
 }
 
-static void tc_update(void) {
+static void tc_update_drag(void) {
 	if(!tc.drag.active) {
 		return;
 	}
 
-	// Consume accumulated movement credit at the keyboard movement speed,
-	// holding the corresponding direction keys while credit remains.
-	// Hysteresis (press threshold > release threshold) keeps a direction key
-	// held across frames so movement is smooth instead of per-frame toggling.
+	// consume accumulated movement credit at the keyboard movement speed,
+	// with hysteresis so a direction stays held across frames.
 	bool right = tc.dir_state[3]
 		? tc.drag.acc_x > TC_MOVE_OFF_THRESHOLD
 		: tc.drag.acc_x > TC_MOVE_ON_THRESHOLD;
@@ -402,6 +465,30 @@ static void tc_update(void) {
 	}
 }
 
+static void tc_update_stick(void) {
+	if(!tc.stick.active) {
+		return;
+	}
+
+	float dx = tc.stick.cur_x - TC_STICK_X;
+	float dy = tc.stick.cur_y - TC_STICK_Y;
+	float dist = hypotf(dx, dy);
+
+	if(dist < TC_STICK_DEADZONE) {
+		tc_clear_dirs();
+		return;
+	}
+
+	// convert stick deflection to 8-way direction keys
+	float nx = dx / dist;
+	float ny = dy / dist;
+
+	tc_set_dir(3, nx >  TC_STICK_DIR_COS); // right
+	tc_set_dir(2, nx < -TC_STICK_DIR_COS); // left
+	tc_set_dir(1, ny >  TC_STICK_DIR_COS); // down
+	tc_set_dir(0, ny < -TC_STICK_DIR_COS); // up
+}
+
 static bool tc_event_handler(SDL_Event *event, void *arg) {
 	switch(event->type) {
 		case SDL_EVENT_FINGER_DOWN:
@@ -428,6 +515,8 @@ void touch_controls_init(void) {
 	if(tc.initialized) {
 		return;
 	}
+
+	tc.move_mode = TC_MODE_DRAG;
 
 	events_register_handler(&(EventHandler) {
 		.proc = tc_event_handler,
@@ -497,56 +586,75 @@ static Sprite *tc_stick_dummy_sprite(void) {
 	return &tc_stick_dummy;
 }
 
-static void tc_draw_stick(void) {
-	if(!tc.drag.active) {
-		return;
-	}
-
+static void tc_draw_circle(float cx, float cy, float radius, Color inner, Color outer) {
 	Sprite *dummy = tc_stick_dummy_sprite();
 
 	if(dummy == NULL) {
 		return;
 	}
 
-	// clamp the knob inside the base ring
-	float dx = tc.drag.cur_x - tc.drag.anchor_x;
-	float dy = tc.drag.cur_y - tc.drag.anchor_y;
-	float dist = hypotf(dx, dy);
-	float maxr = TC_STICK_RADIUS - TC_STICK_KNOB_RADIUS;
-
-	if(dist > maxr && dist > 0) {
-		dx = dx / dist * maxr;
-		dy = dy / dist * maxr;
-	}
-
-	float kx = tc.drag.anchor_x + dx;
-	float ky = tc.drag.anchor_y + dy;
-
-	// base ring: transparent center, translucent rim
 	r_shader("sprite_filled_circle");
-	r_uniform_vec4("color_inner", 0, 0, 0, 0);
-	r_uniform_vec4("color_outer", 0.27f, 0.27f, 0.30f, 0.30f);
+	r_uniform_vec4("color_inner", inner.r, inner.g, inner.b, inner.a);
+	r_uniform_vec4("color_outer", outer.r, outer.g, outer.b, outer.a);
 	r_draw_sprite(&(SpriteParams) {
 		.sprite = dummy,
-		.pos = { tc.drag.anchor_x, tc.drag.anchor_y },
-		.scale = { TC_STICK_RADIUS * 2, TC_STICK_RADIUS * 2 },
+		.pos = { cx, cy },
+		.scale = { radius * 2, radius * 2 },
 		.blend = BLEND_PREMUL_ALPHA,
 		.color = RGBA_MUL_ALPHA(1, 1, 1, 1),
 	});
+}
 
-	// flush now so the base uses its own uniform values
+static void tc_draw_stick_visual(void) {
+	float base_x, base_y, cur_x, cur_y;
+
+	if(tc.move_mode == TC_MODE_STICK) {
+		// fixed joystick base on the left
+		base_x = TC_STICK_X;
+		base_y = TC_STICK_Y;
+
+		if(tc.stick.active) {
+			cur_x = tc.stick.cur_x;
+			cur_y = tc.stick.cur_y;
+		} else {
+			cur_x = base_x;
+			cur_y = base_y;
+		}
+	} else {
+		// direct touch: stick appears where the drag started
+		if(!tc.drag.active) {
+			return;
+		}
+
+		base_x = tc.drag.anchor_x;
+		base_y = tc.drag.anchor_y;
+		cur_x = tc.drag.cur_x;
+		cur_y = tc.drag.cur_y;
+	}
+
+	// clamp the knob inside the base
+	float dx = cur_x - base_x;
+	float dy = cur_y - base_y;
+	float dist = hypotf(dx, dy);
+	float kx = base_x;
+	float ky = base_y;
+
+	if(dist > TC_STICK_MAX_TRAVEL && dist > 0) {
+		kx += dx / dist * TC_STICK_MAX_TRAVEL;
+		ky += dy / dist * TC_STICK_MAX_TRAVEL;
+	} else {
+		kx += dx;
+		ky += dy;
+	}
+
+	// base ring: transparent center, translucent rim
+	tc_draw_circle(base_x, base_y, TC_STICK_RADIUS,
+		RGBA(0, 0, 0, 0), RGBA(0.27f, 0.27f, 0.30f, 0.30f));
 	r_flush_sprites();
 
 	// knob: solid translucent circle following the finger
-	r_uniform_vec4("color_inner", 0.45f, 0.45f, 0.50f, 0.50f);
-	r_uniform_vec4("color_outer", 0.45f, 0.45f, 0.50f, 0.50f);
-	r_draw_sprite(&(SpriteParams) {
-		.sprite = dummy,
-		.pos = { kx, ky },
-		.scale = { TC_STICK_KNOB_RADIUS * 2, TC_STICK_KNOB_RADIUS * 2 },
-		.blend = BLEND_PREMUL_ALPHA,
-		.color = RGBA_MUL_ALPHA(1, 1, 1, 1),
-	});
+	tc_draw_circle(kx, ky, TC_STICK_KNOB_RADIUS,
+		RGBA(0.45f, 0.45f, 0.50f, 0.50f), RGBA(0.45f, 0.45f, 0.50f, 0.50f));
 }
 
 void touch_controls_draw(void) {
@@ -554,7 +662,11 @@ void touch_controls_draw(void) {
 		return;
 	}
 
-	tc_update();
+	if(tc.move_mode == TC_MODE_DRAG) {
+		tc_update_drag();
+	} else {
+		tc_update_stick();
+	}
 
 	Framebuffer *prev_fb = r_framebuffer_current();
 	r_framebuffer(NULL);
@@ -570,8 +682,7 @@ void touch_controls_draw(void) {
 	Color frame = RGBA(0.9f, 0.9f, 1.0f, 0.30f);
 	Color active_fill = RGBA(0.8f, 0.6f, 0.2f, 0.25f);
 
-	// virtual joystick visual (base ring + knob), shown while dragging
-	tc_draw_stick();
+	tc_draw_stick_visual();
 
 	for(int i = 0; i < TC_NUM_BUTTONS; ++i) {
 		const TCButtonDef *b = &tc_buttons[i];

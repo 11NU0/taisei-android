@@ -53,13 +53,17 @@ Runtime behaviour
   * Rendering uses the gles30 backend. Desktop GLSL shaders are translated at
     runtime through glslang + SPIRV-Cross (shader_transpiler=enabled), so the
     stock resource packages work unmodified.
-  * Touch controls (similar to browser-based Touhou ports such as
-    touhouonline.com): touch anywhere on the screen and drag -- the player
-    follows your finger trail (touch trail = player trail). Press a second
-    finger while dragging to move slowly (focus). Right side buttons: A
-    (shot / menu accept), B (bomb / menu abort), F (hold to focus), S (skip
-    dialogue), an auto-fire toggle, and a pause button. The Android back
-    button is mapped to Escape. All keys follow the in-game key bindings.
+  * Touch controls (modeled after browser-based Touhou ports such as
+    touhouonline.com) support two movement modes, toggled by the "M" button:
+      - Direct touch ("touch trail = player trail"): touch anywhere and
+        drag; the player follows your finger. Press a second finger while
+        dragging to move slowly (focus).
+      - Virtual joystick: a fixed stick base on the left; drag its knob to
+        steer (8-way).
+    Right side buttons: A (shot / menu accept), B (bomb / menu abort),
+    F (hold to focus), S (skip dialogue), an auto-fire toggle, the "M"
+    movement-mode toggle, and a pause button. The Android back button is
+    mapped to Escape. All keys follow the in-game key bindings.
   * Everything is logged to logcat under the "taisei" tag:
         adb logcat -s taisei:* SDL:*
 
