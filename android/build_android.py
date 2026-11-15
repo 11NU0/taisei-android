@@ -233,12 +233,28 @@ def build_native(ndk, abi, buildtype, jobs, skip_compile, reconfigure=False):
     raise SystemExit("libtaisei.so not found in %s" % build_dir)
 
 
+def compile_l10n(assets_dir):
+    # Compile .po translations into 10-l10n.zip without needing msgfmt on the host.
+    po_dir = os.path.join(TAISEI_ROOT, "po")
+    out_zip = os.path.join(assets_dir, "10-l10n.zip")
+    script = os.path.join(ANDROID_DIR, "compile_l10n.py")
+
+    if not os.path.isfile(os.path.join(po_dir, "zh_CN.po")):
+        log("no .po files; skipping translation package")
+        return
+
+    log("compiling translations")
+    run([sys.executable, script, po_dir, out_zip])
+
+
 def stage_assets(install_dir, assets_dir):
     data_src = os.path.join(install_dir, "data")
     if not os.path.isdir(data_src):
         raise SystemExit("Installed data directory not found: %s" % data_src)
 
     shutil.copytree(data_src, assets_dir, dirs_exist_ok=True)
+
+    compile_l10n(assets_dir)
 
     meta_dir = os.path.join(assets_dir, "taisei")
     os.makedirs(meta_dir, exist_ok=True)
