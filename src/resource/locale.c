@@ -219,6 +219,13 @@ static void locale_load(ResourceLoadState *st) {
 		const char *orig = &locale->strings[ostr->offset - strings_offset];
 		const char *tran = &locale->strings[tstr->offset - strings_offset];
 
+		// An empty translation means the string is not translated yet.
+		// Match gettext(3) semantics and fall back to the original
+		// string in that case, instead of rendering nothing.
+		if(!*tran) {
+			continue;
+		}
+
 		ht_str2str_extern_set(&locale->table, orig, tran);
 	}
 
